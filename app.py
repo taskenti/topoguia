@@ -652,7 +652,7 @@ def crear_pdf_topoguia(datos, imgs):
         pdf.set_text_color(0, 0, 0)
         pdf.multi_cell(190, 4, datos['consejos'])
     
-    return pdf.output()
+     return bytes(pdf.output())
 
 # ==================== BARRA LATERAL Y GENERACIÓN ====================
 st.sidebar.header("🎯 Acciones")
