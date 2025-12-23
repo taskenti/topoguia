@@ -652,7 +652,7 @@ def crear_pdf_topoguia(datos, imgs):
         pdf.set_text_color(0, 0, 0)
         pdf.multi_cell(190, 4, datos['consejos'])
     
-     return bytes(pdf.output())
+    return bytes(pdf.output())
 
 # ==================== BARRA LATERAL Y GENERACIÓN ====================
 st.sidebar.header("🎯 Acciones")
@@ -713,5 +713,3 @@ if st.sidebar.button("🚀 GENERAR PDF", type="primary", use_container_width=Tru
                 )
         except Exception as e:
             st.error(f"❌ Error al generar el PDF: {str(e)}")
-
-#
