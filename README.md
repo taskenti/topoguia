@@ -186,6 +186,44 @@ def cargar_plantilla():
     }
 ```
 
+## 🔒 Seguridad
+
+### Gestión de Contraseñas
+
+- Las contraseñas se almacenan hasheadas con bcrypt
+- **IMPORTANTE**: Cambia las contraseñas por defecto antes de desplegar en producción
+- El archivo `config.yaml` NO debe subirse a repositorios públicos
+- Añade `config.yaml` a `.gitignore` si contiene datos sensibles
+
+### Configuración de Cookies
+
+Edita los parámetros de cookies en `config.yaml`:
+
+```yaml
+cookie:
+  expiry_days: 30              # Días antes de expirar la sesión
+  key: tu_clave_secreta_única  # Cambia esto por una clave única
+  name: topoguias_auth_cookie
+```
+
+**¡IMPORTANTE!**: Genera una clave única para `key` en producción:
+
+```python
+import secrets
+print(secrets.token_hex(32))
+```
+
+### Usuarios Preautorizados
+
+Puedes definir emails que podrán registrarse automáticamente:
+
+```yaml
+preauthorized:
+  emails:
+  - usuario@permitido.com
+  - otro@permitido.com
+```
+
 ## 🔧 Tecnologías Utilizadas
 
 - **Streamlit**: Framework para aplicaciones web interactivas
