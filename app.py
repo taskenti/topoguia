@@ -4,7 +4,9 @@ import qrcode
 import tempfile
 import os
 from datetime import datetime
-import json
+import yaml
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -13,11 +15,44 @@ st.set_page_config(
     page_icon="🏔️"
 )
 
+# --- SISTEMA DE AUTENTICACIÓN ---
+# Cargar configuración de usuarios
+with open('config.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
+)
+
+# Widget de login
+name, authentication_status, username = authenticator.login('Login', 'main')
+
+# Verificar estado de autenticación
+if authentication_status == False:
+    st.error('Usuario/contraseña incorrectos')
+    st.stop()
+elif authentication_status == None:
+    st.warning('Por favor, introduce tu usuario y contraseña')
+    st.info("""
+    **Usuarios de prueba:**
+    - Usuario: `admin` | Contraseña: `admin123`
+    - Usuario: `usuario1` | Contraseña: `demo123`
+    """)
+    st.stop()
+
+# Si está autenticado, mostrar la aplicación
+authenticator.logout('Cerrar Sesión', 'sidebar')
+st.sidebar.write(f'Bienvenido/a *{name}*')
+st.sidebar.divider()
+
 # --- CSS PERSONALIZADO ---
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(135deg, #2d5016 0%, #4a7c2e 100%);
+        background: linear-gradient(135deg, #007A33 0%, #00a847 100%);
         padding: 2rem;
         border-radius: 10px;
         margin-bottom: 2rem;
@@ -38,7 +73,7 @@ st.markdown("""
     }
     .info-box {
         background-color: #f0f9ff;
-        border-left: 4px solid #3b82f6;
+        border-left: 4px solid #007A33;
         padding: 1rem;
         border-radius: 5px;
         margin: 1rem 0;
@@ -67,7 +102,9 @@ def cargar_plantilla():
     return {
         'entidad_promotora': 'Junta de Comunidades de Castilla-La Mancha',
         'red_senderos': 'Red de Senderos de Guadalajara',
-        'homologacion': 'Federación de Montañismo',
+        'parque': 'Parque Natural Sierra Norte de Guadalajara',
+        'telefono_parque': '949 88 53 00',
+        'telefono_emergencias': '112',
         'web_institucional': 'http://areasprotegidas.castillalamancha.es'
     }
 
@@ -102,7 +139,7 @@ if 'form_data' not in st.session_state:
 # --- TABS PRINCIPALES ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📋 Datos Básicos",
-    "📊 Ficha Técnica",
+    "📊 Ficha Técnica y MIDE",
     "📝 Descripción",
     "🖼️ Imágenes",
     "⚙️ Configuración"
@@ -126,14 +163,15 @@ with tab1:
         
         punto_inicio = st.text_input(
             "Punto de Inicio",
+            value="Centro de Interpretación",
             placeholder="Mandayona",
             help="Localidad o punto donde comienza el sendero"
         )
         
-        coordenadas = st.text_input(
-            "Coordenadas GPS",
-            placeholder="41°01'23\"N 2°38'45\"W",
-            help="Coordenadas del punto de inicio"
+        lugares_interes = st.text_input(
+            "Lugares de Interés (separados por coma)",
+            value="Pico Ocejón, Castillo de Atienza",
+            help="Lugares destacados que aparecerán etiquetados en la imagen panorámica"
         )
     
     with col2:
@@ -145,19 +183,18 @@ with tab1:
         
         municipio = st.text_input(
             "Municipio(s)",
+            value="Mandayona",
             placeholder="Mandayona",
             help="Municipios por los que transcurre la ruta"
         )
-    
-    st.subheader("Acceso")
-    como_llegar = st.text_area(
-        "Cómo Llegar",
-        placeholder="Desde Guadalajara por la CM-101...",
-        help="Descripción de cómo llegar al punto de inicio",
-        height=100
-    )
+        
+        mirador_nombre = st.text_input(
+            "Nombre del Mirador (opcional)",
+            value="MIRADOR DEL PICO",
+            help="Si hay un mirador principal, ponle nombre"
+        )
 
-# ==================== TAB 2: FICHA TÉCNICA ====================
+# ==================== TAB 2: FICHA TÉCNICA Y MIDE ====================
 with tab2:
     st.header("Características Técnicas")
     
@@ -170,35 +207,23 @@ with tab2:
             help="Distancia total del recorrido"
         )
         
-        desnivel_positivo = st.text_input(
-            "Desnivel Positivo",
+        desnivel_subida = st.text_input(
+            "Desnivel Subida",
             value="167 m",
             help="Metros de subida acumulada"
-        )
-        
-        altitud_min = st.text_input(
-            "Altitud Mínima",
-            placeholder="850 m",
-            help="Punto más bajo de la ruta"
         )
     
     with col2:
         tiempo = st.text_input(
-            "Tiempo Estimado *",
+            "Tiempo Estimado (Horario) *",
             value="2h 35m",
             help="Tiempo estimado para completar la ruta"
         )
         
-        desnivel_negativo = st.text_input(
-            "Desnivel Negativo",
+        desnivel_bajada = st.text_input(
+            "Desnivel Bajada",
             value="167 m",
             help="Metros de bajada acumulada"
-        )
-        
-        altitud_max = st.text_input(
-            "Altitud Máxima",
-            placeholder="1050 m",
-            help="Punto más alto de la ruta"
         )
     
     with col3:
@@ -208,91 +233,110 @@ with tab2:
             help="Tipo de recorrido"
         )
         
-        dificultad = st.selectbox(
-            "Dificultad",
-            ["Baja", "Media", "Alta"],
-            index=1,
-            help="Nivel de dificultad general"
-        )
-        
-        tipo_firme = st.text_input(
-            "Tipo de Firme",
-            placeholder="Camino rural, sendero",
-            help="Características del terreno"
+        altitud_rango = st.text_input(
+            "Rango Altitud",
+            value="900-1100 m",
+            help="Altitud mínima y máxima (ej: 900-1100 m)"
         )
     
     st.divider()
-    st.subheader("Información Adicional")
+    st.subheader("Valores MIDE (Método de Información De Excursiones)")
+    st.caption("Valoración del 1 al 5 para cada aspecto")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        epoca = st.text_input(
-            "Época Recomendada",
-            value="Todo el año",
-            help="Mejor época para realizar la ruta"
+        mide_severidad = st.number_input(
+            "Severidad del Medio",
+            min_value=1,
+            max_value=5,
+            value=1,
+            help="Condiciones ambientales adversas"
         )
     
     with col2:
-        agua = st.text_input(
-            "Disponibilidad de Agua",
-            value="No disponible en ruta",
-            help="Fuentes o puntos de agua en el recorrido"
+        mide_orientacion = st.number_input(
+            "Orientación",
+            min_value=1,
+            max_value=5,
+            value=2,
+            help="Dificultad para orientarse"
         )
     
     with col3:
-        sombra = st.text_input(
-            "Sombra",
-            value="Escasa",
-            help="Disponibilidad de zonas con sombra"
+        mide_desplazamiento = st.number_input(
+            "Dificultad Desplazamiento",
+            min_value=1,
+            max_value=5,
+            value=2,
+            help="Dificultad del terreno"
+        )
+    
+    with col4:
+        mide_esfuerzo = st.number_input(
+            "Esfuerzo Necesario",
+            min_value=1,
+            max_value=5,
+            value=2,
+            help="Esfuerzo físico requerido"
         )
 
 # ==================== TAB 3: DESCRIPCIÓN ====================
 with tab3:
     st.header("Descripción y Contenidos")
     
-    descripcion = st.text_area(
-        "Descripción del Sendero *",
-        height=250,
-        placeholder="Este sendero circular comienza en el Centro de Interpretación...",
-        help="Describe el recorrido, paisajes y características principales de la ruta"
+    st.subheader("Descripción del Sendero")
+    st.caption("Escribe 3-4 párrafos describiendo la ruta")
+    
+    parrafo1 = st.text_area(
+        "Párrafo 1: Introducción",
+        value="Este sendero circular comienza en el Centro de Interpretación...",
+        height=100,
+        help="Introduce la ruta, distancia, tipo y punto de inicio"
+    )
+    
+    parrafo2 = st.text_area(
+        "Párrafo 2: Descripción del recorrido",
+        value="El recorrido transcurre por caminos vecinales y sendas entre campos de cultivo...",
+        height=100,
+        help="Describe el trazado, paisajes y elementos arquitectónicos"
+    )
+    
+    parrafo3 = st.text_area(
+        "Párrafo 3: Vegetación y vistas",
+        value="La vegetación predominante son las encinas, con miradores panorámicos...",
+        height=100,
+        help="Menciona la flora y los puntos con mejores vistas"
+    )
+    
+    parrafo4 = st.text_area(
+        "Párrafo 4: Fauna",
+        value="En cuanto a fauna, es posible avistar buitres leonados y mirlo acuático...",
+        height=100,
+        help="Describe la fauna característica de la zona"
     )
     
     st.divider()
+    st.subheader("Recomendaciones")
+    
+    recomendaciones = st.text_area(
+        "Texto de Recomendaciones",
+        value="Se recomienda evitar los meses de verano por las altas temperaturas. Precaución al cruzar la carretera CM-1003.",
+        height=80,
+        help="Advertencias importantes para los senderistas"
+    )
+    
+    st.divider()
+    st.subheader("Hitos del Recorrido (para el perfil)")
+    st.caption("Puntos destacados que aparecerán etiquetados en el perfil de elevación")
     
     col1, col2 = st.columns(2)
-    
     with col1:
-        puntos_interes = st.text_area(
-            "Puntos de Interés",
-            height=150,
-            placeholder="• Iglesia de San Bartolomé\n• Mirador de Mirabueno\n• Ermita de Aragosa",
-            help="Lugares destacados a lo largo del recorrido"
-        )
-    
+        hito1 = st.text_input("Hito 1", value="INICIO DE RUTA (C.I.N.)")
+        hito2 = st.text_input("Hito 2", value="MIRABUENO")
     with col2:
-        flora_fauna = st.text_area(
-            "Flora y Fauna",
-            height=150,
-            placeholder="Encinas, quejigos, águila real, buitre leonado...",
-            help="Especies vegetales y animales destacadas"
-        )
-    
-    st.divider()
-    
-    consejos = st.text_area(
-        "Consejos y Recomendaciones",
-        height=120,
-        placeholder="• Llevar agua suficiente\n• Protección solar recomendada\n• Calzado adecuado para senderismo",
-        help="Recomendaciones para los senderistas"
-    )
-    
-    precauciones = st.text_area(
-        "Precauciones",
-        height=120,
-        placeholder="• Evitar los días de mucho calor\n• No recomendable con lluvia intensa",
-        help="Advertencias importantes sobre la ruta"
-    )
+        hito3 = st.text_input("Hito 3", value="ARAGOSA")
+        hito4 = st.text_input("Hito 4", value="FINAL DE RUTA")
 
 # ==================== TAB 4: IMÁGENES ====================
 with tab4:
@@ -301,18 +345,18 @@ with tab4:
     st.markdown("""
     <div class="info-box">
         <strong>ℹ️ Información:</strong> Las imágenes con asterisco (*) son obligatorias.
-        Formatos aceptados: JPG, JPEG, PNG. Tamaño máximo recomendado: 5MB por imagen.
+        El diseño final es horizontal (landscape). Formatos: JPG, PNG.
     </div>
     """, unsafe_allow_html=True)
     
     # Foto Panorámica
     st.subheader("📸 Foto Panorámica / Banner")
-    st.caption("Imagen opcional que aparecerá en la parte superior del folleto")
+    st.caption("Imagen panorámica que aparecerá en la parte superior de la PÁGINA 1")
     img_banner = st.file_uploader(
         "Sube la foto panorámica",
         type=['png', 'jpg', 'jpeg'],
         key="banner",
-        help="Imagen panorámica del paisaje o inicio de la ruta"
+        help="Imagen panorámica del paisaje. Se añadirán etiquetas automáticamente."
     )
     if img_banner:
         st.image(img_banner, caption="Vista previa - Banner", use_container_width=True)
@@ -324,13 +368,13 @@ with tab4:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🗺️ Mapa de Ruta *")
-        st.caption("Mapa con el trazado completo del sendero")
+        st.subheader("🗺️ Mapa Topográfico *")
+        st.caption("Mapa con el trazado de la ruta (aparece en PÁGINA 2)")
         img_mapa = st.file_uploader(
             "Sube el mapa de la ruta",
             type=['png', 'jpg', 'jpeg'],
             key="mapa",
-            help="Mapa topográfico o esquemático con el recorrido marcado"
+            help="Mapa topográfico con el recorrido marcado"
         )
         if img_mapa:
             st.image(img_mapa, caption="Vista previa - Mapa", use_container_width=True)
@@ -340,12 +384,12 @@ with tab4:
     
     with col2:
         st.subheader("📈 Perfil de Elevación *")
-        st.caption("Gráfica del perfil altimétrico de la ruta")
+        st.caption("Gráfica del perfil altimétrico (aparece en PÁGINA 2)")
         img_perfil = st.file_uploader(
             "Sube el perfil de elevación",
             type=['png', 'jpg', 'jpeg'],
             key="perfil",
-            help="Gráfico que muestra las variaciones de altitud"
+            help="Gráfico de área mostrando las variaciones de altitud"
         )
         if img_perfil:
             st.image(img_perfil, caption="Vista previa - Perfil", use_container_width=True)
@@ -357,7 +401,7 @@ with tab4:
     
     # Tabla MIDE
     st.subheader("📊 Tabla MIDE *")
-    st.caption("Método de Información De Excursiones - Valoración de dificultad")
+    st.caption("Imagen de la matriz MIDE con valores de dificultad")
     img_mide = st.file_uploader(
         "Sube la tabla MIDE",
         type=['png', 'jpg', 'jpeg'],
@@ -374,29 +418,19 @@ with tab4:
     
     st.divider()
     
-    # Fotos adicionales
-    st.subheader("📷 Fotografías Adicionales (Opcional)")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        img_foto1 = st.file_uploader(
-            "Foto adicional 1",
-            type=['png', 'jpg', 'jpeg'],
-            key="foto1"
-        )
-        if img_foto1:
-            st.image(img_foto1, caption="Foto 1", use_container_width=True)
-            imagenes['foto1'] = img_foto1
-    
-    with col2:
-        img_foto2 = st.file_uploader(
-            "Foto adicional 2",
-            type=['png', 'jpg', 'jpeg'],
-            key="foto2"
-        )
-        if img_foto2:
-            st.image(img_foto2, caption="Foto 2", use_container_width=True)
-            imagenes['foto2'] = img_foto2
+    # Logo institucional
+    st.subheader("🏛️ Logo Institucional (Opcional)")
+    st.caption("Logo que aparecerá en la cabecera")
+    img_logo = st.file_uploader(
+        "Logo Castilla-La Mancha o del Parque",
+        type=['png', 'jpg', 'jpeg'],
+        key="logo"
+    )
+    if img_logo:
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.image(img_logo, caption="Vista previa - Logo", width=200)
+        imagenes['logo'] = img_logo
 
 # ==================== TAB 5: CONFIGURACIÓN ====================
 with tab5:
@@ -413,254 +447,313 @@ with tab5:
         )
     
     with col2:
-        url_mas_info = st.text_input(
-            "URL Información Adicional",
-            placeholder="https://turismoguadalajara.es",
-            help="URL adicional para más información"
+        telefono_emergencias = st.text_input(
+            "Teléfono Emergencias",
+            value=st.session_state.plantilla['telefono_emergencias']
         )
     
     st.divider()
     st.subheader("🏛️ Datos Institucionales (Plantilla)")
-    st.caption("Estos datos son comunes para todas las rutas y aparecerán automáticamente en los folletos")
+    st.caption("Estos datos son comunes para todas las rutas")
     
     col1, col2 = st.columns(2)
     
     with col1:
         entidad_promotora = st.text_input(
             "Entidad Promotora",
-            value=st.session_state.plantilla['entidad_promotora'],
-            help="Organismo o entidad que promueve la ruta"
+            value=st.session_state.plantilla['entidad_promotora']
+        )
+        
+        parque_natural = st.text_input(
+            "Parque Natural",
+            value=st.session_state.plantilla['parque']
+        )
+    
+    with col2:
+        telefono_parque = st.text_input(
+            "Teléfono del Parque",
+            value=st.session_state.plantilla['telefono_parque']
         )
         
         red_senderos = st.text_input(
             "Red de Senderos",
-            value=st.session_state.plantilla['red_senderos'],
-            help="Red o sistema de senderos al que pertenece"
-        )
-    
-    with col2:
-        homologacion = st.text_input(
-            "Homologación",
-            value=st.session_state.plantilla['homologacion'],
-            help="Entidad que homologa el sendero"
-        )
-        
-        contacto = st.text_input(
-            "Contacto / Teléfono",
-            placeholder="949 88 70 00",
-            help="Teléfono de contacto o información"
+            value=st.session_state.plantilla['red_senderos']
         )
     
     st.divider()
     
+    st.subheader("📋 Consejos para 'Disfruta del Parque'")
+    st.caption("Aparecerán en la sección inferior de la PÁGINA 2")
+    
+    consejos_predefinidos = st.text_area(
+        "Consejos",
+        value="• Lleva prismáticos para observar fauna\n• Respeta el silencio del entorno\n• No enciendas fuego\n• Llévate toda tu basura",
+        height=120
+    )
+    
     if st.button("💾 Guardar Configuración de Plantilla", type="secondary"):
         st.session_state.plantilla = {
             'entidad_promotora': entidad_promotora,
+            'parque': parque_natural,
+            'telefono_parque': telefono_parque,
+            'telefono_emergencias': telefono_emergencias,
             'red_senderos': red_senderos,
-            'homologacion': homologacion,
             'web_institucional': url_qr
         }
         st.success("✅ Configuración guardada correctamente")
 
-# ==================== GENERACIÓN DEL PDF ====================
-class PDF(FPDF):
+# ==================== GENERACIÓN DEL PDF (LANDSCAPE - 2 PÁGINAS) ====================
+class PDF_Landscape(FPDF):
     def __init__(self, datos):
-        super().__init__()
+        super().__init__(orientation='L', unit='mm', format='A4')  # Landscape
         self.datos = datos
+        self.set_auto_page_break(False)
     
-    def header(self):
-        # Franja verde superior
-        self.set_fill_color(45, 80, 22)  # Verde oscuro
-        self.rect(0, 0, 210, 30, 'F')
+    def pagina_1_informativa(self, imgs):
+        """PÁGINA 1: Cara informativa con descripción y foto panorámica"""
+        self.add_page()
         
-        # Código de ruta
-        self.set_font('Helvetica', 'B', 26)
-        self.set_text_color(255, 255, 255)
-        self.set_xy(10, 8)
-        self.cell(0, 8, self.datos.get('codigo_ruta', ''), align='L')
+        # Color verde corporativo
+        verde = (0, 122, 51)  # #007A33
         
-        # Nombre del sendero
-        self.set_font('Helvetica', 'B', 14)
-        self.set_xy(10, 18)
-        self.cell(0, 8, self.datos.get('nombre_sendero', ''), align='L')
-    
-    def footer(self):
-        self.set_y(-15)
+        # 1. CABECERA CON LOGO (si existe)
+        if imgs.get('logo'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                tmp.write(imgs['logo'].getvalue())
+                self.image(tmp.name, x=10, y=5, h=15)
+                os.remove(tmp.name)
+        
+        # Texto institucional en cabecera
         self.set_font('Helvetica', 'I', 8)
-        self.set_text_color(128, 128, 128)
-        fecha = datetime.now().strftime("%d/%m/%Y")
-        self.cell(0, 10, f'Generado el {fecha} - {self.datos.get("entidad_promotora", "")}', align='C')
+        self.set_text_color(100, 100, 100)
+        self.set_xy(200, 8)
+        self.cell(0, 4, self.datos.get('entidad_promotora', ''), align='R')
+        self.set_xy(200, 12)
+        self.cell(0, 4, self.datos.get('parque_natural', ''), align='R')
+        
+        # 2. FOTO PANORÁMICA CON ETIQUETA VERTICAL
+        y_banner = 25
+        if imgs.get('banner'):
+            # Etiqueta vertical izquierda
+            mirador = self.datos.get('mirador_nombre', 'MIRADOR DEL PICO')
+            if mirador:
+                self.set_fill_color(*verde)
+                self.rect(10, y_banner, 15, 80, 'F')
+                self.set_font('Helvetica', 'B', 10)
+                self.set_text_color(255, 255, 255)
+                self.set_xy(10, y_banner + 40)
+                self.rotate(90, 17.5, y_banner + 40)
+                self.cell(0, 0, mirador, align='C')
+                self.rotate(0)
+            
+            # Imagen panorámica
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(imgs['banner'].getvalue())
+                self.image(tmp.name, x=28, y=y_banner, w=259, h=80)
+                os.remove(tmp.name)
+            
+            # Etiquetas de lugares de interés (simuladas como texto sobre la imagen)
+            self.set_font('Helvetica', 'B', 7)
+            self.set_text_color(255, 255, 255)
+            lugares = self.datos.get('lugares_interes', '').split(',')
+            x_pos = 40
+            for lugar in lugares[:3]:  # Máximo 3 etiquetas
+                self.set_xy(x_pos, y_banner + 5)
+                self.set_fill_color(0, 0, 0, 150)  # Fondo semi-transparente
+                self.cell(0, 5, lugar.strip(), fill=False)
+                x_pos += 80
+        
+        # 3. TÍTULO PRINCIPAL
+        y_titulo = 110
+        self.set_font('Helvetica', 'B', 28)
+        self.set_text_color(*verde)
+        self.set_xy(15, y_titulo)
+        self.cell(0, 10, self.datos.get('codigo_ruta', ''))
+        
+        self.set_font('Helvetica', 'B', 14)
+        self.set_xy(15, y_titulo + 12)
+        self.cell(0, 7, f"SENDERO {self.datos.get('nombre_sendero', '')}")
+        
+        # 4. COLUMNA DE TEXTO - DESCRIPCIÓN (4 párrafos)
+        y_texto = y_titulo + 25
+        self.set_font('Helvetica', '', 9)
+        self.set_text_color(0, 0, 0)
+        
+        ancho_columna = 180
+        
+        for i, parrafo in enumerate([
+            self.datos.get('parrafo1', ''),
+            self.datos.get('parrafo2', ''),
+            self.datos.get('parrafo3', ''),
+            self.datos.get('parrafo4', '')
+        ]):
+            self.set_xy(15, y_texto)
+            self.multi_cell(ancho_columna, 4, parrafo, align='J')
+            y_texto = self.get_y() + 2
+        
+        # 5. BLOQUE DE RECOMENDACIONES (Inferior)
+        y_recom = 185
+        self.set_fill_color(255, 243, 205)  # Fondo amarillo claro
+        self.rect(15, y_recom, ancho_columna, 15, 'F')
+        
+        self.set_font('Helvetica', 'B', 10)
+        self.set_text_color(*verde)
+        self.set_xy(17, y_recom + 2)
+        self.cell(0, 5, 'RECOMENDACIONES')
+        
+        self.set_font('Helvetica', '', 8)
+        self.set_text_color(0, 0, 0)
+        self.set_xy(17, y_recom + 7)
+        self.multi_cell(ancho_columna - 4, 3.5, self.datos.get('recomendaciones', ''))
+        
+        # PIE DE PÁGINA
+        self.set_y(-10)
+        self.set_font('Helvetica', 'I', 7)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 5, f'Generado el {datetime.now().strftime("%d/%m/%Y")}', align='C')
+    
+    def pagina_2_tecnica(self, imgs):
+        """PÁGINA 2: Mapa, perfil, ficha técnica y datos adicionales"""
+        self.add_page()
+        
+        verde = (0, 122, 51)
+        
+        # 1. MAPA TOPOGRÁFICO (Superior Izquierdo - 60% del ancho)
+        if imgs.get('mapa'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(imgs['mapa'].getvalue())
+                self.image(tmp.name, x=10, y=10, w=180, h=110)
+                os.remove(tmp.name)
+        
+        # 2. PERFIL DE ELEVACIÓN (Centro - Debajo del mapa)
+        y_perfil = 125
+        if imgs.get('perfil'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(imgs['perfil'].getvalue())
+                self.image(tmp.name, x=10, y=y_perfil, w=180, h=45)
+                os.remove(tmp.name)
+        
+        # 3. PANEL LATERAL DERECHO - FICHA TÉCNICA
+        x_panel = 195
+        y_panel = 10
+        ancho_panel = 92
+        
+        # Título del panel
+        self.set_fill_color(*verde)
+        self.rect(x_panel, y_panel, ancho_panel, 8, 'F')
+        self.set_font('Helvetica', 'B', 11)
+        self.set_text_color(255, 255, 255)
+        self.set_xy(x_panel, y_panel + 2)
+        self.cell(ancho_panel, 5, 'FICHA TÉCNICA', align='C')
+        
+        # Datos técnicos en tabla
+        y_datos = y_panel + 12
+        self.set_fill_color(245, 245, 245)
+        self.rect(x_panel, y_datos, ancho_panel, 35, 'F')
+        
+        self.set_font('Helvetica', 'B', 9)
+        self.set_text_color(0, 0, 0)
+        
+        datos_lista = [
+            ('Horario:', self.datos.get('tiempo', '')),
+            ('Distancia:', self.datos.get('distancia', '')),
+            ('Desnivel Subida:', self.datos.get('desnivel_subida', '')),
+            ('Desnivel Bajada:', self.datos.get('desnivel_bajada', '')),
+            ('Tipo:', self.datos.get('tipo_ruta', ''))
+        ]
+        
+        y_item = y_datos + 3
+        for etiqueta, valor in datos_lista:
+            self.set_xy(x_panel + 3, y_item)
+            self.set_font('Helvetica', 'B', 8)
+            self.cell(35, 5, etiqueta, align='L')
+            self.set_font('Helvetica', '', 8)
+            self.cell(0, 5, valor, align='L')
+            y_item += 6
+        
+        # 4. IMAGEN MIDE
+        y_mide = y_datos + 40
+        if imgs.get('mide'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                tmp.write(imgs['mide'].getvalue())
+                self.image(tmp.name, x=x_panel, y=y_mide, w=ancho_panel)
+                os.remove(tmp.name)
+            y_mide += 35
+        
+        # 5. SECCIÓN SEÑALIZACIÓN
+        self.set_font('Helvetica', 'B', 9)
+        self.set_text_color(*verde)
+        self.set_xy(x_panel, y_mide + 5)
+        self.cell(0, 5, 'SEÑALIZACIÓN')
+        
+        self.set_font('Helvetica', '', 7)
+        self.set_text_color(0, 0, 0)
+        self.set_xy(x_panel, y_mide + 11)
+        self.multi_cell(ancho_panel, 3, 'Marcas blancas y amarillas:\n• Continuidad\n• Cambio de dirección\n• Dirección equivocada')
+        
+        # 6. SECCIÓN DISFRUTA DEL PARQUE
+        y_consejos = y_mide + 28
+        self.set_font('Helvetica', 'B', 9)
+        self.set_text_color(*verde)
+        self.set_xy(x_panel, y_consejos)
+        self.cell(0, 5, 'DISFRUTA DEL PARQUE')
+        
+        self.set_font('Helvetica', '', 7)
+        self.set_text_color(0, 0, 0)
+        self.set_xy(x_panel, y_consejos + 6)
+        self.multi_cell(ancho_panel, 3, self.datos.get('consejos_disfruta', ''))
+        
+        # 7. TELÉFONOS DE INTERÉS Y QR
+        y_telefonos = y_consejos + 28
+        self.set_font('Helvetica', 'B', 9)
+        self.set_text_color(*verde)
+        self.set_xy(x_panel, y_telefonos)
+        self.cell(0, 5, 'TELÉFONOS DE INTERÉS')
+        
+        self.set_font('Helvetica', '', 8)
+        self.set_text_color(0, 0, 0)
+        self.set_xy(x_panel, y_telefonos + 6)
+        self.cell(0, 4, f"Emergencias: {self.datos.get('telefono_emergencias', '112')}")
+        self.set_xy(x_panel, y_telefonos + 11)
+        self.cell(0, 4, f"Parque: {self.datos.get('telefono_parque', '')}")
+        
+        # Código QR
+        if self.datos.get('url_qr'):
+            qr = qrcode.QRCode(box_size=8, border=1)
+            qr.add_data(self.datos['url_qr'])
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            qr_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            qr_img.save(qr_path.name)
+            
+            self.image(qr_path.name, x=x_panel + 30, y=y_telefonos + 18, w=25)
+            os.remove(qr_path.name)
+            
+            self.set_font('Helvetica', 'I', 6)
+            self.set_xy(x_panel, y_telefonos + 45)
+            self.multi_cell(ancho_panel, 2.5, self.datos.get('url_qr', ''), align='C')
 
 def crear_pdf_topoguia(datos, imgs):
-    """Genera el PDF de la topoguía"""
-    pdf = PDF(datos)
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    """Genera el PDF de la topoguía en formato landscape de 2 páginas"""
+    pdf = PDF_Landscape(datos)
     
-    y_actual = 35
+    # Página 1: Informativa
+    pdf.pagina_1_informativa(imgs)
     
-    # 1. FOTO PANORÁMICA (si existe)
-    if imgs.get('banner'):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(imgs['banner'].getvalue())
-            pdf.image(tmp.name, x=10, y=y_actual, w=190, h=45)
-            os.remove(tmp.name)
-        y_actual += 50
+    # Página 2: Técnica
+    pdf.pagina_2_tecnica(imgs)
     
-    # 2. LAYOUT PRINCIPAL: Descripción (izq) + Datos (der)
-    x_columna_izq = 10
-    x_columna_der = 135
-    ancho_izq = 120
-    ancho_der = 65
-    
-    # COLUMNA IZQUIERDA: Descripción
-    pdf.set_xy(x_columna_izq, y_actual)
-    pdf.set_font('Helvetica', 'B', 11)
-    pdf.set_text_color(45, 80, 22)
-    pdf.cell(0, 7, 'DESCRIPCIÓN', ln=True)
-    
-    pdf.set_font('Helvetica', '', 9)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_xy(x_columna_izq, pdf.get_y())
-    
-    desc = datos.get('descripcion', '')
-    if desc:
-        pdf.multi_cell(ancho_izq, 4.5, desc)
-    
-    y_fin_descripcion = pdf.get_y()
-    
-    # COLUMNA DERECHA: Ficha técnica
-    y_col_der = y_actual
-    
-    # Cuadro gris con datos principales
-    pdf.set_fill_color(240, 240, 240)
-    pdf.rect(x_columna_der, y_col_der, ancho_der, 32, 'F')
-    
-    pdf.set_font('Helvetica', 'B', 9)
-    pdf.set_text_color(0, 0, 0)
-    
-    # Datos en el cuadro
-    items_ficha = [
-        ('Distancia:', datos.get('distancia', '-')),
-        ('Tiempo:', datos.get('tiempo', '-')),
-        ('Desnivel (+):', datos.get('desnivel_positivo', '-')),
-        ('Tipo:', datos.get('tipo_ruta', '-')),
-        ('Dificultad:', datos.get('dificultad', '-')),
-    ]
-    
-    y_item = y_col_der + 3
-    for etiqueta, valor in items_ficha:
-        pdf.set_xy(x_columna_der + 2, y_item)
-        pdf.set_font('Helvetica', 'B', 8)
-        pdf.cell(22, 4, etiqueta, align='L')
-        pdf.set_font('Helvetica', '', 8)
-        pdf.cell(0, 4, valor, align='L')
-        y_item += 5.5
-    
-    y_col_der += 35
-    
-    # Imagen MIDE
-    if imgs.get('mide'):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(imgs['mide'].getvalue())
-            pdf.image(tmp.name, x=x_columna_der, y=y_col_der, w=ancho_der)
-            os.remove(tmp.name)
-        y_col_der += 40
-    
-    # Código QR
-    if datos.get('url_qr'):
-        qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(datos['url_qr'])
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        qr_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-        qr_img.save(qr_path.name)
-        
-        pdf.image(qr_path.name, x=x_columna_der + 15, y=y_col_der + 2, w=30)
-        os.remove(qr_path.name)
-        
-        pdf.set_font('Helvetica', 'I', 7)
-        pdf.set_xy(x_columna_der, y_col_der + 34)
-        pdf.multi_cell(ancho_der, 3, 'Más información', align='C')
-        
-        y_col_der += 45
-    
-    # Calcular posición para siguiente sección
-    y_siguiente = max(y_fin_descripcion, y_col_der) + 8
-    
-    # 3. PUNTOS DE INTERÉS (si existen)
-    if datos.get('puntos_interes'):
-        pdf.set_xy(x_columna_izq, y_siguiente)
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.set_text_color(45, 80, 22)
-        pdf.cell(0, 7, 'PUNTOS DE INTERÉS', ln=True)
-        
-        pdf.set_font('Helvetica', '', 9)
-        pdf.set_text_color(0, 0, 0)
-        pdf.multi_cell(190, 4.5, datos['puntos_interes'])
-        y_siguiente = pdf.get_y() + 5
-    
-    # 4. MAPA
-    if imgs.get('mapa'):
-        if y_siguiente > 240:
-            pdf.add_page()
-            y_siguiente = 35
-        
-        pdf.set_xy(x_columna_izq, y_siguiente)
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.set_text_color(45, 80, 22)
-        pdf.cell(0, 7, 'MAPA DE RUTA', ln=True)
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(imgs['mapa'].getvalue())
-            pdf.image(tmp.name, x=x_columna_izq, y=pdf.get_y() + 2, w=190)
-            os.remove(tmp.name)
-        
-        y_siguiente = pdf.get_y() + 75
-    
-    # 5. PERFIL DE ELEVACIÓN
-    if imgs.get('perfil'):
-        if y_siguiente > 230:
-            pdf.add_page()
-            y_siguiente = 35
-        
-        pdf.set_xy(x_columna_izq, y_siguiente)
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.set_text_color(45, 80, 22)
-        pdf.cell(0, 7, 'PERFIL DE ELEVACIÓN', ln=True)
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(imgs['perfil'].getvalue())
-            pdf.image(tmp.name, x=x_columna_izq, y=pdf.get_y() + 2, w=190, h=40)
-            os.remove(tmp.name)
-        
-        y_siguiente = pdf.get_y() + 48
-    
-    # 6. CONSEJOS (si existen)
-    if datos.get('consejos'):
-        if y_siguiente > 250:
-            pdf.add_page()
-            y_siguiente = 35
-        
-        pdf.set_xy(x_columna_izq, y_siguiente)
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.set_text_color(45, 80, 22)
-        pdf.cell(0, 6, 'CONSEJOS Y RECOMENDACIONES', ln=True)
-        
-        pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(0, 0, 0)
-        pdf.multi_cell(190, 4, datos['consejos'])
-    
-    return bytes(pdf.output())
+    return pdf.output()
 
 # ==================== BARRA LATERAL Y GENERACIÓN ====================
 st.sidebar.header("🎯 Acciones")
 
 # Resumen
 st.sidebar.subheader("📊 Resumen")
+st.sidebar.write(f"**Usuario:** {username}")
 st.sidebar.write(f"**Ruta:** {codigo_ruta if 'codigo_ruta' in locals() else 'Sin definir'}")
-st.sidebar.write(f"**Nombre:** {nombre_sendero[:30] if 'nombre_sendero' in locals() and nombre_sendero else 'Sin definir'}...")
+st.sidebar.write(f"**Nombre:** {nombre_sendero[:25] if 'nombre_sendero' in locals() and nombre_sendero else 'Sin definir'}...")
 
 # Validación
 datos_formulario = {
@@ -668,22 +761,29 @@ datos_formulario = {
     'nombre_sendero': nombre_sendero if 'nombre_sendero' in locals() else '',
     'distancia': distancia if 'distancia' in locals() else '',
     'tiempo': tiempo if 'tiempo' in locals() else '',
-    'desnivel_positivo': desnivel_positivo if 'desnivel_positivo' in locals() else '',
-    'desnivel_negativo': desnivel_negativo if 'desnivel_negativo' in locals() else '',
+    'desnivel_subida': desnivel_subida if 'desnivel_subida' in locals() else '',
+    'desnivel_bajada': desnivel_bajada if 'desnivel_bajada' in locals() else '',
     'tipo_ruta': tipo_ruta if 'tipo_ruta' in locals() else '',
-    'dificultad': dificultad if 'dificultad' in locals() else '',
-    'descripcion': descripcion if 'descripcion' in locals() else '',
-    'puntos_interes': puntos_interes if 'puntos_interes' in locals() else '',
-    'consejos': consejos if 'consejos' in locals() else '',
+    'lugares_interes': lugares_interes if 'lugares_interes' in locals() else '',
+    'mirador_nombre': mirador_nombre if 'mirador_nombre' in locals() else '',
+    'parrafo1': parrafo1 if 'parrafo1' in locals() else '',
+    'parrafo2': parrafo2 if 'parrafo2' in locals() else '',
+    'parrafo3': parrafo3 if 'parrafo3' in locals() else '',
+    'parrafo4': parrafo4 if 'parrafo4' in locals() else '',
+    'recomendaciones': recomendaciones if 'recomendaciones' in locals() else '',
+    'consejos_disfruta': consejos_predefinidos if 'consejos_predefinidos' in locals() else '',
     'url_qr': url_qr if 'url_qr' in locals() else '',
+    'telefono_emergencias': telefono_emergencias if 'telefono_emergencias' in locals() else '',
+    'telefono_parque': telefono_parque if 'telefono_parque' in locals() else '',
     'entidad_promotora': entidad_promotora if 'entidad_promotora' in locals() else '',
+    'parque_natural': parque_natural if 'parque_natural' in locals() else '',
 }
 
 errores = validar_campos(datos_formulario, imagenes)
 
 if errores:
     st.sidebar.error(f"⚠️ Faltan {len(errores)} campo(s):")
-    for error in errores:
+    for error in errores[:5]:  # Mostrar máximo 5
         st.sidebar.write(f"• {error}")
 else:
     st.sidebar.success("✅ Todos los campos completos")
@@ -697,7 +797,7 @@ if st.sidebar.button("🚀 GENERAR PDF", type="primary", use_container_width=Tru
                 "\n".join([f"• {e}" for e in errores]))
     else:
         try:
-            with st.spinner("Generando PDF..."):
+            with st.spinner("Generando PDF en formato horizontal (2 páginas)..."):
                 pdf_bytes = crear_pdf_topoguia(datos_formulario, imagenes)
                 
                 st.success("✅ ¡PDF generado correctamente!")
@@ -711,5 +811,8 @@ if st.sidebar.button("🚀 GENERAR PDF", type="primary", use_container_width=Tru
                     mime="application/pdf",
                     use_container_width=True
                 )
+                
+                st.info("📄 El PDF tiene 2 páginas:\n- **Página 1**: Descripción y foto panorámica\n- **Página 2**: Mapa, perfil y ficha técnica")
         except Exception as e:
             st.error(f"❌ Error al generar el PDF: {str(e)}")
+            st.exception(e)
