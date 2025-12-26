@@ -16,9 +16,38 @@ st.set_page_config(
 )
 
 # --- SISTEMA DE AUTENTICACIÓN ---
+# Crear config.yaml si no existe
+if not os.path.exists('config.yaml'):
+    config_default = """credentials:
+  usernames:
+    admin:
+      email: admin@topoguias.es
+      name: Administrador
+      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2
+    usuario1:
+      email: usuario1@example.com
+      name: Usuario Demo
+      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2
+
+cookie:
+  expiry_days: 30
+  key: some_signature_key_cambiar_en_produccion_12345
+  name: topoguias_auth_cookie
+
+preauthorized:
+  emails: []
+"""
+    with open('config.yaml', 'w') as f:
+        f.write(config_default)
+    st.info("⚙️ Se ha creado un archivo config.yaml por defecto. Por favor, cambia las contraseñas en producción.")
+
 # Cargar configuración de usuarios
-with open('config.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
+try:
+    with open('config.yaml') as file:
+        config = yaml.load(file, Loader=SafeLoader)
+except FileNotFoundError:
+    st.error("❌ No se encuentra el archivo config.yaml. Creando uno por defecto...")
+    st.stop()
 
 authenticator = stauth.Authenticate(
     config['credentials'],
@@ -27,8 +56,17 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
-# Widget de login
-name, authentication_status, username = authenticator.login('Login', 'main')
+# Widget de login (API actualizado)
+try:
+    # Intentar con el nuevo API (v0.3.0+)
+    authenticator.login()
+except TypeError:
+    # Fallback al API antiguo
+    authenticator.login('Login', 'main')
+
+name = st.session_state.get("name")
+authentication_status = st.session_state.get("authentication_status")
+username = st.session_state.get("username")
 
 # Verificar estado de autenticación
 if authentication_status == False:
@@ -44,7 +82,11 @@ elif authentication_status == None:
     st.stop()
 
 # Si está autenticado, mostrar la aplicación
-authenticator.logout('Cerrar Sesión', 'sidebar')
+try:
+    authenticator.logout('Cerrar Sesión', 'sidebar')
+except:
+    authenticator.logout(location='sidebar')
+    
 st.sidebar.write(f'Bienvenido/a *{name}*')
 st.sidebar.divider()
 
