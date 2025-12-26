@@ -18,16 +18,22 @@ st.set_page_config(
 # --- SISTEMA DE AUTENTICACIÓN ---
 # Crear config.yaml si no existe
 if not os.path.exists('config.yaml'):
-    config_default = """credentials:
+    st.warning("⚙️ Creando archivo de configuración por primera vez...")
+    
+    # Generar hashes correctos para las contraseñas
+    import streamlit_authenticator as stauth
+    hashed_passwords = stauth.Hasher(['admin123', 'demo123']).generate()
+    
+    config_default = f"""credentials:
   usernames:
     admin:
       email: admin@topoguias.es
       name: Administrador
-      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2
+      password: {hashed_passwords[0]}
     usuario1:
       email: usuario1@example.com
       name: Usuario Demo
-      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2
+      password: {hashed_passwords[1]}
 
 cookie:
   expiry_days: 30
@@ -37,16 +43,19 @@ cookie:
 preauthorized:
   emails: []
 """
-    with open('config.yaml', 'w') as f:
+    with open('config.yaml', 'w', encoding='utf-8') as f:
         f.write(config_default)
-    st.info("⚙️ Se ha creado un archivo config.yaml por defecto. Por favor, cambia las contraseñas en producción.")
+    st.success("✅ Archivo de configuración creado")
 
 # Cargar configuración de usuarios
 try:
-    with open('config.yaml') as file:
+    with open('config.yaml', encoding='utf-8') as file:
         config = yaml.load(file, Loader=SafeLoader)
 except FileNotFoundError:
-    st.error("❌ No se encuentra el archivo config.yaml. Creando uno por defecto...")
+    st.error("❌ No se encuentra el archivo config.yaml")
+    st.stop()
+except Exception as e:
+    st.error(f"❌ Error al cargar config.yaml: {e}")
     st.stop()
 
 authenticator = stauth.Authenticate(
