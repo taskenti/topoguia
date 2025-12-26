@@ -1,0 +1,19 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@topoguias.es
+      name: Administrador
+      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2  # password: admin123
+    usuario1:
+      email: usuario1@example.com
+      name: Usuario Demo
+      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2  # password: demo123
+    
+cookie:
+  expiry_days: 30
+  key: some_signature_key_12345
+  name: topoguias_auth_cookie
+
+preauthorized:
+  emails:
+  - nuevousuario@example.com
