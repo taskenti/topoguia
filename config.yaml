@@ -3,15 +3,15 @@ credentials:
     admin:
       email: admin@topoguias.es
       name: Administrador
-      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2  # password: admin123
+      password: $2b$12$VQ2Zl7c8qKX5K5Z5Z5Z5ZOuX5X5X5X5X5X5X5X5X5X5X5X5X5X5XO
     usuario1:
       email: usuario1@example.com
       name: Usuario Demo
-      password: $2b$12$KIXqvB5pJH8yGmK6pZ4aEOqN7xGx1tZ4y3rJ8c5d6f7g8h9i0j1k2  # password: demo123
+      password: $2b$12$VQ2Zl7c8qKX5K5Z5Z5Z5ZOuX5X5X5X5X5X5X5X5X5X5X5X5X5X5XO
     
 cookie:
   expiry_days: 30
-  key: some_signature_key_12345
+  key: cambiar_esta_clave_por_una_unica_y_segura_en_produccion_12345678
   name: topoguias_auth_cookie
 
 preauthorized:
